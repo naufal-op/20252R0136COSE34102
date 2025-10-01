@@ -123,6 +123,10 @@ void            yield(void);
 int             getnice(int);
 int             setnice(int,int);
 void            ps(void);
+//newly added functions
+int             getnice(int);
+int             setnice(int,int);
+void            ps(void);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

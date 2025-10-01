@@ -23,6 +23,10 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+// Newly added system calls
+int setnice(int pid, int nice);
+int getnice(int pid);
+int ps(void);
 
 // ulib.c
 int stat(const char*, struct stat*);

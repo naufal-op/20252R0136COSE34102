@@ -141,6 +141,7 @@ userinit(void)
 
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
+  p->nice = 5;
 
   // this assignment to p->state lets other cores
   // run this process. the acquire forces the above
@@ -199,6 +200,7 @@ fork(void)
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
+  np->nice = curproc->nice;
 
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
@@ -545,6 +547,13 @@ setnice(int pid, int nice)
     /* ******************** */
     /* * WRITE YOUR CODE    */
     /* ******************** */
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if(p->pid == pid && p->state != UNUSED){
+            p->nice = nice;
+            release(&ptable.lock);
+            return 0;
+        }
+    }
 
     release(&ptable.lock);
     return -1;
@@ -559,6 +568,13 @@ getnice(int pid)
     /* ******************** */
     /* * WRITE YOUR CODE    */
     /* ******************** */
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if(p->pid == pid && p->state != UNUSED){
+            int nice = p->nice;
+            release(&ptable.lock);
+            return nice;
+        }
+    }
 
     release(&ptable.lock);
     return -1;
@@ -574,6 +590,19 @@ ps(void)
     /* ******************** */
     /* * WRITE YOUR CODE    */
     /* ******************** */
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if(p->state == UNUSED)
+            continue;
+        cprintf("%s\t%d\t%d\t%d\t%d\t", p->name, p->pid, p->parent ? p->parent->pid : 0, p->sz, p->nice);
+        switch(p->state){
+            case SLEEPING: cprintf("SLEEPING\n"); break;
+            case RUNNABLE: cprintf("RUNNABLE\n"); break;
+            case RUNNING:  cprintf("RUNNING\n");  break;
+            case ZOMBIE:   cprintf("ZOMBIE\n");   break;
+            case EMBRYO:   cprintf("EMBRYO\n");   break;
+            default:       cprintf("UNKNOWN\n");  break;
+        }
+    }
 
     release(&ptable.lock);
     return;
