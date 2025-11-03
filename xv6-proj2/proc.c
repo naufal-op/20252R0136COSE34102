@@ -12,6 +12,61 @@ struct {
   struct proc proc[NPROC];
 } ptable;
 
+//R2: ready queue
+static struct proc *readyq[NPROC];
+static int rq_size = 0;
+
+// return 1 if a run before b
+static int
+higher_prio(struct proc *a, struct proc *b)
+{
+  // lower priority value=higher priority
+  if(a->priority < b->priority)
+    return 1;
+  if(a->priority > b->priority)
+    return 0;
+  // tie=larger pid wins
+  return a->pid > b->pid;
+}
+
+static void
+enqueue_ready(struct proc *p)
+{
+  int i, j;
+
+  if(rq_size >= NPROC)
+    return;
+
+  for(i = 0; i < rq_size; i++){
+    if(higher_prio(p, readyq[i]))
+      break;
+  }
+  // shift right
+  for(j = rq_size; j > i; j--)
+    readyq[j] = readyq[j-1];
+
+  readyq[i] = p;
+  rq_size++;
+}
+
+static struct proc *
+dequeue_ready(void)
+{
+  int i;
+  if(rq_size == 0)
+    return 0;
+
+  struct proc *p = readyq[0];
+
+  // shift left
+  for( i = 1; i < rq_size; i++)
+    readyq[i-1] = readyq[i];
+
+  rq_size--;
+  return p;
+}
+//R2 end
+
 static struct proc *initproc;
 
 int nextpid = 1;
@@ -19,6 +74,14 @@ extern void forkret(void);
 extern void trapret(void);
 
 static void wakeup1(void *chan);
+//R2
+static void
+make_runnable(struct proc *p)
+{
+  p->state = RUNNABLE;
+  enqueue_ready(p);
+}
+//R2 end
 
 void
 pinit(void)
@@ -150,7 +213,8 @@ userinit(void)
   // because the assignment might not be atomic.
   acquire(&ptable.lock);
 
-  p->state = RUNNABLE;
+  //p->state = RUNNABLE; R2 change
+  make_runnable(p); //R2
 
   release(&ptable.lock);
 }
@@ -223,7 +287,8 @@ fork(void)
 
   acquire(&ptable.lock);
 
-  np->state = RUNNABLE;
+  //np->state = RUNNABLE; R2 change
+  make_runnable(np); //R2
 
   release(&ptable.lock);
 
@@ -341,13 +406,10 @@ scheduler(void)
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
+    //R2, get process from ready queue
+    p= dequeue_ready();
 
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
+    if(p) {
       c->proc = p;
       switchuvm(p);
       p->state = RUNNING;
@@ -355,13 +417,14 @@ scheduler(void)
       swtch(&(c->scheduler), p->context);
       switchkvm();
 
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
       c->proc = 0;
+      release(&ptable.lock);
     }
-    release(&ptable.lock);
-
-  }
+    else
+    {
+     release(&ptable.lock);
+    }
+  }//R2 end 
 }
 
 // Enter scheduler.  Must hold only ptable.lock
@@ -395,7 +458,8 @@ void
 yield(void)
 {
   acquire(&ptable.lock);  //DOC: yieldlock
-  myproc()->state = RUNNABLE;
+  //myproc()->state = RUNNABLE; R2 change
+  make_runnable(myproc()); //R2
   sched();
   release(&ptable.lock);
 }
@@ -470,7 +534,8 @@ wakeup1(void *chan)
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
     if(p->state == SLEEPING && p->chan == chan)
-      p->state = RUNNABLE;
+      //p->state = RUNNABLE; R2 change
+      make_runnable(p); //R2
 }
 
 // Wake up all processes sleeping on chan.
@@ -496,7 +561,8 @@ kill(int pid)
       p->killed = 1;
       // Wake process from sleep if necessary.
       if(p->state == SLEEPING)
-        p->state = RUNNABLE;
+        //p->state = RUNNABLE; R2 change
+        make_runnable(p); //R2
       release(&ptable.lock);
       return 0;
     }
